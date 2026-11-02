@@ -639,11 +639,24 @@ export const JS = `
     var pathField = document.querySelector(
       '[name="' + (qrBox.getAttribute('data-path-field') || 'path') + '"]'
     );
+    var dirField = document.querySelector(
+      'select[name="' + (qrBox.getAttribute('data-dir-field') || 'dir') + '"]'
+    );
     var hostField = document.querySelector('select[name="host"]');
     var timer = null;
 
-    var currentHost = function () {
-      return (hostField && hostField.value) || qrBox.getAttribute('data-host') || '';
+    // The directory is half of the short link and was being left out, so a
+    // link in a directory advertised a code for a shortcut at the domain
+    // root - a working code for the wrong link, which is worse than none.
+    //
+    // The directory select carries its own domain inside the same value,
+    // the way the server reads it, so the place is taken from there rather
+    // than paired together from two controls that can disagree.
+    var place = function () {
+      var raw = String((dirField && dirField.value) || '');
+      var cut = raw.indexOf('/');
+      if (cut < 0) return { host: raw, dir: '' };
+      return { host: raw.slice(0, cut), dir: raw.slice(cut + 1).replace(/^\\/+|\\/+$/g, '') };
     };
 
     // The same shape the server accepts, so a half-typed path asks for
@@ -654,19 +667,26 @@ export const JS = `
     };
 
     var paint = function () {
-      var path = usable(pathField && pathField.value);
-      var host = currentHost();
-      if (!path || !host) {
+      var at = place();
+      var segment = usable(pathField && pathField.value);
+      var host = at.host || (hostField && hostField.value) || qrBox.getAttribute('data-host') || '';
+      var dir = usable(at.dir);
+      if (!segment || !host) {
         qrBox.hidden = true;
         return;
       }
+      var path = dir ? dir + '/' + segment : segment;
       var logo = qrBox.getAttribute('data-logo');
       var src =
         qrBox.getAttribute('data-base') +
         '?host=' + encodeURIComponent(host) +
         '&path=' + encodeURIComponent(path) +
         '&size=300' +
-        (logo ? '&logo=' + encodeURIComponent(logo) : '');
+        '&ecc=' + encodeURIComponent(qrBox.getAttribute('data-ecc') || 'M') +
+        (logo
+          ? '&logo=' + encodeURIComponent(logo) +
+            '&logoscale=' + encodeURIComponent(qrBox.getAttribute('data-logoscale') || '')
+          : '');
       if (qrImg) {
         qrImg.hidden = false;
         if (qrImg.getAttribute('src') !== src) qrImg.setAttribute('src', src);
@@ -684,6 +704,9 @@ export const JS = `
       pathField.addEventListener('input', schedule);
       pathField.addEventListener('change', schedule);
     }
+    if (dirField) dirField.addEventListener('change', schedule);
+    // The domain select rewrites the directory list rather than the value
+    // read above, so this still has to be listened for.
     if (hostField) hostField.addEventListener('change', schedule);
     paint();
   }

@@ -182,14 +182,27 @@ function readChoice(body, name) {
  * and the code encodes the short URL, which is known from the form alone.
  * It starts hidden and stays hidden without JavaScript, where it could
  * never update.
+ *
+ * The form is two controls, not one: the directory names the place and the
+ * shortcut names the last segment, and a code built from the second alone
+ * is a working code for a different link. Both field names are carried
+ * here so the script reads the whole address.
+ *
+ * `qr` is what the card below is showing, so the two codes on the screen
+ * are the same code. On the edit screen an uploaded centre image is found
+ * by looking up the link at the path being asked for, so while a rename is
+ * being typed it drops out until the new name is saved.
  */
-function qrFloat({ host, path = '', pathField = 'path', logo = '' }) {
+function qrFloat({ host, path = '', pathField = 'path', dirField = 'dir', qr = {} }) {
   return `<aside class="qrfloat" hidden
   data-slink-qr
   data-base="/admin/links/qr"
   data-path-field="${esc(pathField)}"
+  data-dir-field="${esc(dirField)}"
   data-host="${esc(host)}"
-  data-logo="${esc(logo)}">
+  data-ecc="${esc(qr.ecc || 'M')}"
+  data-logo="${esc(qr.logo || '')}"
+  data-logoscale="${esc(qr.scale || String(DEFAULT_LOGO_SCALE))}">
   <img class="qr" alt="QR code for the short link" width="150" height="150"${
     path ? '' : ' hidden'
   }>
@@ -1213,18 +1226,34 @@ function reservedFor(ctx, host) {
 
 /* ------------------------------------------------------------------- qr */
 
-/** The QR card on the edit screen: a live preview and the download link. */
-function qrCard(host, link, url, { uploadToken, appName }) {
-  const base =
-    '/admin/links/qr?host=' + encodeURIComponent(host) + '&path=' + encodeURIComponent(link.pathLc);
+/**
+ * The QR options this screen is currently showing.
+ *
+ * They live in the query string because the card's controls are a GET form
+ * that reloads the screen, which is what lets the preview work without
+ * JavaScript. Both the card and the smaller code beside the shortcut read
+ * them from here, so the two cannot disagree about what is being shown -
+ * which they did: the small one was drawn plain while the card had a centre
+ * image, and the only way to see the real thing was to download it.
+ */
+function qrChoice(link, url) {
   const uploaded = hasLogo(link);
   const rawLogo = url.searchParams.get('qrlogo') || (uploaded ? 'custom' : '');
-  const current = {
+  return {
+    uploaded,
     size: url.searchParams.get('qrsize') || String(DEFAULT_SIZE),
     ecc: url.searchParams.get('qrecc') || 'M',
     logo: rawLogo === '1' || (rawLogo === 'custom' && uploaded) ? rawLogo : '',
     scale: url.searchParams.get('qrscale') || String(DEFAULT_LOGO_SCALE),
   };
+}
+
+/** The QR card on the edit screen: a live preview and the download link. */
+function qrCard(host, link, url, { uploadToken, appName }) {
+  const base =
+    '/admin/links/qr?host=' + encodeURIComponent(host) + '&path=' + encodeURIComponent(link.pathLc);
+  const current = qrChoice(link, url);
+  const uploaded = current.uploaded;
   const logoQuery = current.logo
     ? '&logo=' + encodeURIComponent(current.logo) + '&logoscale=' + encodeURIComponent(current.scale)
     : '';
@@ -1415,7 +1444,7 @@ ${qrFloat({
     host,
     path: link.path,
     pathField: 'newpath',
-    logo: hasLogo(link) ? 'custom' : '',
+    qr: qrChoice(link, url),
   })}
 <h1>${esc(host)}/${esc(link.path)}</h1>
 <p class="sub">${statusBadges(link) || 'Active'} &middot; created ${esc(fmtTime(link.createdAt))} &middot;
