@@ -28,6 +28,7 @@ const suites = [
   'test/passkeys.test.mjs',
   'test/rotation.test.mjs',
   'test/qrlogo.test.mjs',
+  'test/qrpanel.test.mjs',
   'test/places.test.mjs',
   'test/lag.test.mjs',
 ];
